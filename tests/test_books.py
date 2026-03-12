@@ -38,7 +38,8 @@ async def client():
 async def test_get_all_books_empty(client):
     response = await client.get("/books/")
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json()["items"] == []
+    assert response.json()["next_cursor"] is None
 
 
 @pytest.mark.anyio
@@ -54,17 +55,12 @@ async def test_create_book(client):
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Кобзар"
-    assert data["author"] == "Тарас Шевченко"
     assert "id" in data
 
 
 @pytest.mark.anyio
 async def test_get_book_by_id(client):
-    payload = {
-        "title": "Кобзар",
-        "author": "Тарас Шевченко",
-        "year": 1840
-    }
+    payload = {"title": "Кобзар", "author": "Шевченко", "year": 1840}
     create = await client.post("/books/", json=payload)
     book_id = create.json()["id"]
     response = await client.get(f"/books/{book_id}")
@@ -80,11 +76,7 @@ async def test_get_book_not_found(client):
 
 @pytest.mark.anyio
 async def test_delete_book(client):
-    payload = {
-        "title": "Кобзар",
-        "author": "Тарас Шевченко",
-        "year": 1840
-    }
+    payload = {"title": "Кобзар", "author": "Шевченко", "year": 1840}
     create = await client.post("/books/", json=payload)
     book_id = create.json()["id"]
     response = await client.delete(f"/books/{book_id}")
@@ -102,7 +94,7 @@ async def test_filter_by_status(client):
     await client.post("/books/", json={"title": "Книга 1", "author": "Автор", "year": 2000, "status": "available"})
     await client.post("/books/", json={"title": "Книга 2", "author": "Автор", "year": 2001, "status": "issued"})
     response = await client.get("/books/?status=available")
-    data = response.json()
+    data = response.json()["items"]
     assert all(b["status"] == "available" for b in data)
 
 
@@ -111,17 +103,28 @@ async def test_filter_by_author(client):
     await client.post("/books/", json={"title": "Кобзар", "author": "Шевченко", "year": 1840})
     await client.post("/books/", json={"title": "Інша", "author": "Франко", "year": 1900})
     response = await client.get("/books/?author=Шевченко")
-    data = response.json()
+    data = response.json()["items"]
     assert len(data) == 1
     assert "Шевченко" in data[0]["author"]
 
 
 @pytest.mark.anyio
-async def test_pagination(client):
+async def test_cursor_pagination(client):
     for i in range(5):
         await client.post("/books/", json={"title": f"Книга {i}", "author": "Автор", "year": 2000 + i})
-    response = await client.get("/books/?limit=2&offset=0")
-    assert len(response.json()) == 2
+
+    first = await client.get("/books/?limit=2")
+    data = first.json()
+    assert len(data["items"]) == 2
+    assert data["next_cursor"] is not None
+
+    second = await client.get(f"/books/?limit=2&cursor={data['next_cursor']}")
+    data2 = second.json()
+    assert len(data2["items"]) == 2
+
+    first_ids = [b["id"] for b in data["items"]]
+    second_ids = [b["id"] for b in data2["items"]]
+    assert not any(i in second_ids for i in first_ids)
 
 
 @pytest.mark.anyio

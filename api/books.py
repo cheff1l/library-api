@@ -9,25 +9,29 @@ router = APIRouter()
 service = BookService()
 
 
-@router.get("/", response_model=List[BookResponse], status_code=200)
+@router.get("/", status_code=200)
 async def get_all_books(
     status: Optional[BookStatus] = Query(None),
     author: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None, pattern="^(title|year)$"),
     sort_order: str = Query("asc", pattern="^(asc|desc)$"),
     limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    cursor: Optional[str] = Query(None),
     session: AsyncSession = Depends(get_db)
 ):
-    return await service.get_all_books(
+    books, next_cursor = await service.get_all_books(
         session=session,
         status=status.value if status else None,
         author=author,
         sort_by=sort_by,
         sort_order=sort_order,
         limit=limit,
-        offset=offset
+        cursor=cursor
     )
+    return {
+        "items": [BookResponse.model_validate(b) for b in books],
+        "next_cursor": next_cursor
+    }
 
 
 @router.get("/{book_id}", response_model=BookResponse, status_code=200)

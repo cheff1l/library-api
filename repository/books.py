@@ -15,7 +15,7 @@ class BookRepository:
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
         limit: int = 10,
-        offset: int = 0
+        cursor: Optional[str] = None
     ):
         query = select(Book)
 
@@ -29,8 +29,29 @@ class BookRepository:
             query = query.order_by(Book.title.desc() if sort_order == "desc" else Book.title)
         elif sort_by == "year":
             query = query.order_by(Book.year.desc() if sort_order == "desc" else Book.year)
+        else:
+            query = query.order_by(Book.id)
 
-        query = query.limit(limit).offset(offset)
+        if cursor:
+            cursor_result = await session.execute(
+                select(Book).filter(Book.id == cursor)
+            )
+            cursor_book = cursor_result.scalar_one_or_none()
+            if cursor_book:
+                if sort_by == "title":
+                    if sort_order == "desc":
+                        query = query.filter(Book.title < cursor_book.title)
+                    else:
+                        query = query.filter(Book.title > cursor_book.title)
+                elif sort_by == "year":
+                    if sort_order == "desc":
+                        query = query.filter(Book.year < cursor_book.year)
+                    else:
+                        query = query.filter(Book.year > cursor_book.year)
+                else:
+                    query = query.filter(Book.id > cursor_book.id)
+
+        query = query.limit(limit)
         result = await session.execute(query)
         return result.scalars().all()
 

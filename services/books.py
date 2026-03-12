@@ -17,17 +17,19 @@ class BookService:
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
         limit: int = 10,
-        offset: int = 0
+        cursor: Optional[str] = None
     ):
-        return await self.repo.get_all(
+        books = await self.repo.get_all(
             session=session,
             status=status,
             author=author,
             sort_by=sort_by,
             sort_order=sort_order,
             limit=limit,
-            offset=offset
+            cursor=cursor
         )
+        next_cursor = books[-1].id if len(books) == limit else None
+        return books, next_cursor
 
     async def get_book_by_id(self, session: AsyncSession, book_id: str):
         return await self.repo.get_by_id(session, book_id)
