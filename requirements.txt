@@ -7,3 +7,4 @@ motor
 python-dotenv
 pytest-asyncio
 aiosqlite
+pydantic-mongo
