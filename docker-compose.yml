@@ -1,19 +1,24 @@
 services:
-  mongo:
-    image: mongo:7
-    ports:
-      - "27017:27017"
+  mongo_db:
+    image: mongo:latest
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo_admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: books
     volumes:
-      - mongo_data:/data/db
+      - mongo_data:/var/lib/mongodb/data
+    ports:
+      - '27017:27017'
 
   api:
     build: .
     ports:
       - "8000:8000"
     environment:
-      MONGO_URL: mongodb://mongo:27017
+      MONGO_URL: mongodb://mongo_admin:password@mongo_db:27017
     depends_on:
-      - mongo
+      - mongo_db
 
 volumes:
   mongo_data:

@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from pydantic_mongo import ObjectIdField
 from typing import Optional
 from enum import Enum
 
@@ -17,11 +18,11 @@ class BookCreate(BaseModel):
 
 
 class BookResponse(BaseModel):
-    id: str
+    id: ObjectIdField = Field(alias="_id")
     title: str
     author: str
     description: Optional[str]
     status: BookStatus
     year: int
 
-    model_config = {"from_attributes": True}
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}

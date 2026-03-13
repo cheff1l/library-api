@@ -1,6 +1,7 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
+from bson import ObjectId
 from main import app
 from database import get_db
 from services.books import BookService
@@ -38,15 +39,23 @@ class MockCollection:
 
     async def find_one(self, query):
         for book in self.data:
-            if book.get("id") == query.get("id"):
+            if "_id" in query and book.get("_id") == query["_id"]:
                 return dict(book)
         return None
 
     async def insert_one(self, doc):
+        doc["_id"] = ObjectId()
         self.data.append(dict(doc))
+        result = MagicMock()
+        result.inserted_id = doc["_id"]
+        return result
 
     async def delete_one(self, query):
-        self.data = [b for b in self.data if b.get("id") != query.get("id")]
+        before = len(self.data)
+        self.data = [b for b in self.data if b.get("_id") != query.get("_id")]
+        result = MagicMock()
+        result.deleted_count = before - len(self.data)
+        return result
 
 
 class MockDB:
@@ -112,7 +121,7 @@ async def test_get_book_by_id(client):
 
 @pytest.mark.anyio
 async def test_get_book_not_found(client):
-    response = await client.get("/books/non-existent-id")
+    response = await client.get(f"/books/{str(ObjectId())}")
     assert response.status_code == 404
 
 
@@ -127,7 +136,7 @@ async def test_delete_book(client):
 
 @pytest.mark.anyio
 async def test_delete_idempotent(client):
-    response = await client.delete("/books/non-existent-id")
+    response = await client.delete(f"/books/{str(ObjectId())}")
     assert response.status_code == 204
 
 

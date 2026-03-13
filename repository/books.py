@@ -1,5 +1,5 @@
-import uuid
 from typing import Optional
+from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
@@ -32,29 +32,15 @@ class BookRepository:
             cursor = cursor.sort(sort_by, direction)
 
         cursor = cursor.skip(offset).limit(limit)
-        books = await cursor.to_list(length=limit)
-
-        for book in books:
-            if "_id" in book:
-                book["id"] = str(book["_id"])
-                del book["_id"]
-
-        return books
+        return await cursor.to_list(length=limit)
 
     async def get_by_id(self, book_id: str):
-        book = await self.collection.find_one({"id": book_id})
-        if book:
-            if "_id" in book:
-                del book["_id"]
-        return book
+        return await self.collection.find_one({"_id": ObjectId(book_id)})
 
     async def create(self, book_data: dict):
-        book_data["id"] = str(uuid.uuid4())
-        await self.collection.insert_one(book_data)
-        if "_id" in book_data:
-            del book_data["_id"]
-        return book_data
+        result = await self.collection.insert_one(book_data)
+        return await self.collection.find_one({"_id": result.inserted_id})
 
     async def delete(self, book_id: str):
-        await self.collection.delete_one({"id": book_id})
-        return True
+        result = await self.collection.delete_one({"_id": ObjectId(book_id)})
+        return result.deleted_count
