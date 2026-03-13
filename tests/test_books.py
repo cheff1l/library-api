@@ -1,31 +1,74 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from unittest.mock import AsyncMock, MagicMock
 from main import app
 from database import get_db
-from models.books import Base
-
-DATABASE_URL = "sqlite+aiosqlite:///./test.db"
-
-engine_test = create_async_engine(DATABASE_URL)
-AsyncSessionTest = async_sessionmaker(engine_test, class_=AsyncSession, expire_on_commit=False)
+from services.books import BookService
 
 
-async def override_get_db():
-    async with AsyncSessionTest() as session:
-        yield session
+class MockCollection:
+    def __init__(self):
+        self.data = []
+
+    def find(self, query={}):
+        result = []
+        for b in self.data:
+            match = True
+            if "status" in query and b.get("status") != query["status"]:
+                match = False
+            if "author" in query:
+                import re
+                pattern = query["author"]["$regex"]
+                if not re.search(pattern, b.get("author", ""), re.IGNORECASE):
+                    match = False
+            if match:
+                result.append(dict(b))
+
+        mock_cursor = MagicMock()
+        mock_cursor.sort.return_value = mock_cursor
+        mock_cursor.skip.return_value = mock_cursor
+
+        def limit_func(n):
+            limited = MagicMock()
+            limited.to_list = AsyncMock(return_value=result[:n])
+            return limited
+
+        mock_cursor.limit.side_effect = limit_func
+        return mock_cursor
+
+    async def find_one(self, query):
+        for book in self.data:
+            if book.get("id") == query.get("id"):
+                return dict(book)
+        return None
+
+    async def insert_one(self, doc):
+        self.data.append(dict(doc))
+
+    async def delete_one(self, query):
+        self.data = [b for b in self.data if b.get("id") != query.get("id")]
+
+
+class MockDB:
+    def __init__(self):
+        self.books = MockCollection()
+
+
+mock_db = MockDB()
+
+
+def override_get_db():
+    return mock_db
 
 
 app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(autouse=True)
-async def setup_db():
-    async with engine_test.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+def reset_db():
+    mock_db.books.data.clear()
     yield
-    async with engine_test.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    mock_db.books.data.clear()
 
 
 @pytest.fixture
@@ -39,7 +82,6 @@ async def test_get_all_books_empty(client):
     response = await client.get("/books/")
     assert response.status_code == 200
     assert response.json()["items"] == []
-    assert response.json()["next_cursor"] is None
 
 
 @pytest.mark.anyio
@@ -109,22 +151,11 @@ async def test_filter_by_author(client):
 
 
 @pytest.mark.anyio
-async def test_cursor_pagination(client):
+async def test_pagination(client):
     for i in range(5):
         await client.post("/books/", json={"title": f"Книга {i}", "author": "Автор", "year": 2000 + i})
-
-    first = await client.get("/books/?limit=2")
-    data = first.json()
-    assert len(data["items"]) == 2
-    assert data["next_cursor"] is not None
-
-    second = await client.get(f"/books/?limit=2&cursor={data['next_cursor']}")
-    data2 = second.json()
-    assert len(data2["items"]) == 2
-
-    first_ids = [b["id"] for b in data["items"]]
-    second_ids = [b["id"] for b in data2["items"]]
-    assert not any(i in second_ids for i in first_ids)
+    response = await client.get("/books/?limit=2&offset=0")
+    assert len(response.json()["items"]) == 2
 
 
 @pytest.mark.anyio

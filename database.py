@@ -1,18 +1,14 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://mongo:27017")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
-
-AsyncSessionLocal = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
+client = AsyncIOMotorClient(MONGO_URL)
+db = client.library
 
 
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+def get_db():
+    return db

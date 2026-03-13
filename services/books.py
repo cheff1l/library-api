@@ -1,48 +1,44 @@
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from repository.books import BookRepository
 from schemas.books import BookCreate
 
 
 class BookService:
 
-    def __init__(self):
-        self.repo = BookRepository()
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.repo = BookRepository(db)
 
     async def get_all_books(
         self,
-        session: AsyncSession,
         status: Optional[str] = None,
         author: Optional[str] = None,
         sort_by: Optional[str] = None,
         sort_order: str = "asc",
         limit: int = 10,
-        cursor: Optional[str] = None
+        offset: int = 0
     ):
-        books = await self.repo.get_all(
-            session=session,
+        return await self.repo.get_all(
             status=status,
             author=author,
             sort_by=sort_by,
             sort_order=sort_order,
             limit=limit,
-            cursor=cursor
+            offset=offset
         )
-        next_cursor = books[-1].id if len(books) == limit else None
-        return books, next_cursor
 
-    async def get_book_by_id(self, session: AsyncSession, book_id: str):
-        return await self.repo.get_by_id(session, book_id)
+    async def get_book_by_id(self, book_id: str):
+        return await self.repo.get_by_id(book_id)
 
-    async def create_book(self, session: AsyncSession, book_data: BookCreate):
+    async def create_book(self, book_data: BookCreate):
         data = {
             "title": book_data.title,
             "author": book_data.author,
             "description": book_data.description,
-            "status": book_data.status,
+            "status": book_data.status.value,
             "year": book_data.year
         }
-        return await self.repo.create(session, data)
+        return await self.repo.create(data)
 
-    async def delete_book(self, session: AsyncSession, book_id: str):
-        return await self.repo.delete(session, book_id)
+    async def delete_book(self, book_id: str):
+        return await self.repo.delete(book_id)

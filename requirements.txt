@@ -3,7 +3,7 @@ uvicorn
 pydantic
 pytest
 httpx
-sqlalchemy
-asyncpg
-alembic
+motor
 python-dotenv
+pytest-asyncio
+aiosqlite
