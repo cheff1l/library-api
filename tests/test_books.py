@@ -4,8 +4,9 @@ import pytest
 from bson import ObjectId
 from httpx import ASGITransport, AsyncClient
 
-from database import get_db
+import core.rate_limiter as rate_limiter
 from core.security import USERS
+from database import get_db
 from main import app
 
 
@@ -72,7 +73,31 @@ class MockDB:
         self.books = MockCollection()
 
 
+class MockRedis:
+    def __init__(self):
+        self.sorted_sets = {}
+
+    async def zremrangebyscore(self, key, minimum, maximum):
+        values = self.sorted_sets.get(key, {})
+        self.sorted_sets[key] = {
+            member: score for member, score in values.items() if not minimum <= score <= maximum
+        }
+
+    async def zcard(self, key):
+        return len(self.sorted_sets.get(key, {}))
+
+    async def zadd(self, key, mapping):
+        self.sorted_sets.setdefault(key, {}).update(mapping)
+
+    async def expire(self, key, seconds):
+        return True
+
+    def clear(self):
+        self.sorted_sets.clear()
+
+
 mock_db = MockDB()
+mock_redis = MockRedis()
 
 
 def override_get_db():
@@ -80,6 +105,7 @@ def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
+rate_limiter.redis_client = mock_redis
 
 
 @pytest.fixture(scope="session")
@@ -90,11 +116,13 @@ def anyio_backend():
 @pytest.fixture(autouse=True)
 def reset_db():
     mock_db.books.data.clear()
+    mock_redis.clear()
     for username in list(USERS):
         if username != "student":
             del USERS[username]
     yield
     mock_db.books.data.clear()
+    mock_redis.clear()
     for username in list(USERS):
         if username != "student":
             del USERS[username]
@@ -200,6 +228,28 @@ async def test_books_are_protected_without_token(client):
     response = await client.get("/books/")
 
     assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_anonymous_user_is_limited_after_two_requests_per_minute(client):
+    first_response = await client.get("/")
+    second_response = await client.get("/")
+    third_response = await client.get("/")
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert third_response.status_code == 429
+
+
+@pytest.mark.anyio
+async def test_authenticated_user_is_limited_after_ten_requests_per_minute(client, auth_headers):
+    for _ in range(10):
+        response = await client.get("/auth/me", headers=auth_headers)
+        assert response.status_code == 200
+
+    limited_response = await client.get("/auth/me", headers=auth_headers)
+
+    assert limited_response.status_code == 429
 
 
 @pytest.mark.anyio

@@ -1,4 +1,8 @@
 services:
+  redis:
+    image: redis:latest
+    container_name: book-cache
+
   mongo_db:
     image: mongo:latest
     restart: always
@@ -15,10 +19,12 @@ services:
       - "8000:8000"
     environment:
       MONGO_URL: mongodb://mongo_admin:password@mongo_db:27017
+      REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: lab6-super-secret-change-me
       ACCESS_TOKEN_EXPIRE_MINUTES: 15
       REFRESH_TOKEN_EXPIRE_DAYS: 7
     depends_on:
+      - redis
       - mongo_db
 
 volumes:
