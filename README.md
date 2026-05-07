@@ -7,6 +7,7 @@
 ## Що реалізовано
 
 - `POST /auth/login` - генерація access token і refresh token;
+- `POST /auth/register` - реєстрація нового користувача з одразу виданими токенами;
 - `POST /auth/refresh` - генерація нового access token через refresh token;
 - `GET /auth/me` - перевірка поточного користувача за access token;
 - захист усіх `/books` ендпоінтів через `Authorization: Bearer <access_token>`;
@@ -20,6 +21,16 @@
 username: student
 password: password123
 ```
+
+## Реєстрація нового користувача
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"new_student\",\"password\":\"strong123\",\"full_name\":\"New Student\"}"
+```
+
+У відповідь API поверне `access_token` і `refresh_token`, як і після login.
 
 ## Запуск через Docker Compose
 
@@ -49,6 +60,8 @@ uvicorn main:app --reload
 ```
 
 ## Як отримати токени
+
+Через login для демо-користувача:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/auth/login \
@@ -89,9 +102,9 @@ curl -X POST http://127.0.0.1:8000/auth/refresh \
 
 ```text
 main.py                 # створення FastAPI app і підключення router-ів
-api/auth.py             # auth endpoints: login, refresh, me
+api/auth.py             # auth endpoints: register, login, refresh, me
 api/books.py            # захищені endpoints для книг
-core/security.py        # створення, декодування і перевірка JWT
+core/security.py        # користувачі, паролі, створення, декодування і перевірка JWT
 schemas/auth.py         # Pydantic-схеми для auth
 schemas/books.py        # Pydantic-схеми для книг
 services/books.py       # бізнес-логіка книг

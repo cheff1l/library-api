@@ -5,6 +5,7 @@ from bson import ObjectId
 from httpx import ASGITransport, AsyncClient
 
 from database import get_db
+from core.security import USERS
 from main import app
 
 
@@ -89,8 +90,14 @@ def anyio_backend():
 @pytest.fixture(autouse=True)
 def reset_db():
     mock_db.books.data.clear()
+    for username in list(USERS):
+        if username != "student":
+            del USERS[username]
     yield
     mock_db.books.data.clear()
+    for username in list(USERS):
+        if username != "student":
+            del USERS[username]
 
 
 @pytest.fixture
@@ -107,6 +114,45 @@ async def auth_headers(client):
     )
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.anyio
+async def test_register_returns_tokens_and_creates_user(client):
+    response = await client.post(
+        "/auth/register",
+        json={
+            "username": "new_student",
+            "password": "strong123",
+            "full_name": "New Student",
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["token_type"] == "bearer"
+    assert data["access_token"]
+    assert data["refresh_token"]
+
+    me = await client.get(
+        "/auth/me",
+        headers={"Authorization": f"Bearer {data['access_token']}"},
+    )
+    assert me.status_code == 200
+    assert me.json()["username"] == "new_student"
+
+
+@pytest.mark.anyio
+async def test_register_existing_username_returns_409(client):
+    response = await client.post(
+        "/auth/register",
+        json={
+            "username": "student",
+            "password": "strong123",
+            "full_name": "Duplicate Student",
+        },
+    )
+
+    assert response.status_code == 409
 
 
 @pytest.mark.anyio

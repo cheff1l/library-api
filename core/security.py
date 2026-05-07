@@ -26,9 +26,25 @@ USERS = {
 }
 
 
+def hash_password(plain_password: str) -> str:
+    return hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
+
+
 def verify_password(plain_password: str, password_hash: str) -> bool:
-    current_hash = hashlib.sha256(plain_password.encode("utf-8")).hexdigest()
+    current_hash = hash_password(plain_password)
     return hmac.compare_digest(current_hash, password_hash)
+
+
+def register_user(username: str, password: str, full_name: str):
+    if username in USERS:
+        return None
+
+    USERS[username] = {
+        "username": username,
+        "full_name": full_name,
+        "password_hash": hash_password(password),
+    }
+    return {"username": username, "full_name": full_name}
 
 
 def authenticate_user(username: str, password: str):

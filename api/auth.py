@@ -6,10 +6,33 @@ from core.security import (
     create_refresh_token,
     decode_token,
     get_current_user,
+    register_user,
 )
-from schemas.auth import AccessTokenResponse, LoginRequest, RefreshRequest, TokenPair, UserResponse
+from schemas.auth import (
+    AccessTokenResponse,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenPair,
+    UserResponse,
+)
 
 router = APIRouter()
+
+
+@router.post("/register", response_model=TokenPair, status_code=201)
+async def register(payload: RegisterRequest):
+    user = register_user(payload.username, payload.password, payload.full_name)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this username already exists",
+        )
+
+    return TokenPair(
+        access_token=create_access_token(user["username"]),
+        refresh_token=create_refresh_token(user["username"]),
+    )
 
 
 @router.post("/login", response_model=TokenPair, status_code=200)
