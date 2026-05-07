@@ -1,4 +1,12 @@
 services:
+  mock_api:
+    image: stoplight/prism:latest
+    command: mock -h 0.0.0.0 --multiprocess=false /tmp/openapi.yaml
+    volumes:
+      - ./openapi.yaml:/tmp/openapi.yaml:ro
+    ports:
+      - "4010:4010"
+
   redis:
     image: redis:latest
 

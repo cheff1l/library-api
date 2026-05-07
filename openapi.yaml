@@ -1,0 +1,555 @@
+openapi: 3.1.0
+info:
+  title: Library API
+  version: 8.0.0
+  description: Mock API specification for a library service with JWT authentication, books and rate limiter responses.
+servers:
+  - url: http://127.0.0.1:4010
+    description: Prism mock server
+  - url: http://127.0.0.1:8000
+    description: Real FastAPI server
+tags:
+  - name: Auth
+    description: Authentication and token endpoints
+  - name: Books
+    description: Protected endpoints for library books
+  - name: Default
+    description: Service health endpoint
+paths:
+  /:
+    get:
+      tags:
+        - Default
+      summary: Root
+      operationId: root
+      responses:
+        "200":
+          description: API is running
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RootResponse"
+              examples:
+                success:
+                  value:
+                    message: Library API is running!
+                    docs: /docs
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Register
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              newUser:
+                value:
+                  username: new_student
+                  password: strong123
+                  full_name: New Student
+      responses:
+        "201":
+          description: User was registered and tokens were issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+              examples:
+                success:
+                  value:
+                    access_token: mock-access-token
+                    refresh_token: mock-refresh-token
+                    token_type: bearer
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                conflict:
+                  value:
+                    detail: User with this username already exists
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Login
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              student:
+                value:
+                  username: student
+                  password: password123
+      responses:
+        "200":
+          description: Access and refresh tokens were issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+              examples:
+                success:
+                  value:
+                    access_token: mock-access-token
+                    refresh_token: mock-refresh-token
+                    token_type: bearer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh Token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+            examples:
+              refresh:
+                value:
+                  refresh_token: mock-refresh-token
+      responses:
+        "200":
+          description: New access token was issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessTokenResponse"
+              examples:
+                success:
+                  value:
+                    access_token: new-mock-access-token
+                    token_type: bearer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Get current user
+      operationId: getMe
+      security:
+        - HTTPBearer: []
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+              examples:
+                student:
+                  value:
+                    username: student
+                    full_name: Library API Student
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /books/:
+    get:
+      tags:
+        - Books
+      summary: Get all books
+      operationId: getAllBooks
+      security:
+        - HTTPBearer: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/BookStatus"
+        - name: author
+          in: query
+          required: false
+          schema:
+            type: string
+          example: Шевченко
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - title
+              - year
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+            default: asc
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of books
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListResponse"
+              examples:
+                books:
+                  value:
+                    items:
+                      - id: 6637834775d37b3ed238d16e
+                        title: Кобзар
+                        author: Тарас Шевченко
+                        description: Збірка поетичних творів
+                        status: available
+                        year: 1840
+                    limit: 10
+                    offset: 0
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    post:
+      tags:
+        - Books
+      summary: Create book
+      operationId: createBook
+      security:
+        - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookCreate"
+            examples:
+              kobzar:
+                value:
+                  title: Кобзар
+                  author: Тарас Шевченко
+                  description: Збірка поетичних творів
+                  status: available
+                  year: 1840
+      responses:
+        "201":
+          description: Book was created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookResponse"
+              examples:
+                created:
+                  value:
+                    id: 6637834775d37b3ed238d16e
+                    title: Кобзар
+                    author: Тарас Шевченко
+                    description: Збірка поетичних творів
+                    status: available
+                    year: 1840
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /books/{book_id}:
+    get:
+      tags:
+        - Books
+      summary: Get book by id
+      operationId: getBookById
+      security:
+        - HTTPBearer: []
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+      responses:
+        "200":
+          description: Book was found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookResponse"
+              examples:
+                book:
+                  value:
+                    id: 6637834775d37b3ed238d16e
+                    title: Кобзар
+                    author: Тарас Шевченко
+                    description: Збірка поетичних творів
+                    status: available
+                    year: 1840
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+    delete:
+      tags:
+        - Books
+      summary: Delete book
+      operationId: deleteBook
+      security:
+        - HTTPBearer: []
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+      responses:
+        "204":
+          description: Book was deleted or already did not exist
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+components:
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    BookId:
+      name: book_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: 6637834775d37b3ed238d16e
+  responses:
+    Unauthorized:
+      description: Missing or invalid access token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            unauthorized:
+              value:
+                detail: Could not validate credentials
+    NotFound:
+      description: Resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            notFound:
+              value:
+                detail: Book was not found
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+    TooManyRequests:
+      description: Rate limit was exceeded
+      headers:
+        Retry-After:
+          description: Seconds until rate limit window is reset
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            limited:
+              value:
+                detail: Rate limit exceeded for anonymous user
+  schemas:
+    RootResponse:
+      type: object
+      required:
+        - message
+        - docs
+      properties:
+        message:
+          type: string
+        docs:
+          type: string
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: student
+        password:
+          type: string
+          example: password123
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - full_name
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 6
+          maxLength: 128
+        full_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    TokenPair:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+    AccessTokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+    UserResponse:
+      type: object
+      required:
+        - username
+        - full_name
+      properties:
+        username:
+          type: string
+        full_name:
+          type: string
+    BookStatus:
+      type: string
+      enum:
+        - available
+        - issued
+    BookCreate:
+      type: object
+      required:
+        - title
+        - author
+        - year
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        author:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        status:
+          $ref: "#/components/schemas/BookStatus"
+        year:
+          type: integer
+          minimum: 1000
+          maximum: 2100
+    BookResponse:
+      allOf:
+        - $ref: "#/components/schemas/BookCreate"
+        - type: object
+          required:
+            - id
+            - status
+          properties:
+            id:
+              type: string
+              example: 6637834775d37b3ed238d16e
+    BookListResponse:
+      type: object
+      required:
+        - items
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BookResponse"
+        limit:
+          type: integer
+        offset:
+          type: integer
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+    ValidationErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
