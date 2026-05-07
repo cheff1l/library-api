@@ -1,72 +1,140 @@
-# Library API — FastAPI
+# Library API - Lab 6
 
-REST API для бібліотеки книг, розроблений на FastAPI з використанням Python async/await.
+Лабораторна робота 6: автентифікація та авторизація з використанням JWT.
 
-## Запуск проєкту
+Проект реалізовано на FastAPI. API працює з книгами бібліотеки, а всі `/books` ендпоінти захищені Bearer JWT access token. Також реалізовано refresh token flow.
+
+## Що реалізовано
+
+- `POST /auth/login` - генерація access token і refresh token;
+- `POST /auth/refresh` - генерація нового access token через refresh token;
+- `GET /auth/me` - перевірка поточного користувача за access token;
+- захист усіх `/books` ендпоінтів через `Authorization: Bearer <access_token>`;
+- CRUD-операції читання/створення/видалення книг;
+- фільтрація, сортування і пагінація книг;
+- Swagger UI через стандартну FastAPI документацію.
+
+## Демо-користувач
+
+```text
+username: student
+password: password123
+```
+
+## Запуск через Docker Compose
 
 ```bash
-# 1. Встановити залежності
+docker compose up --build
+```
+
+Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+OpenAPI JSON:
+
+```text
+http://127.0.0.1:8000/openapi.json
+```
+
+## Запуск локально без Docker
+
+Потрібно, щоб MongoDB уже була запущена.
+
+```bash
 pip install -r requirements.txt
-
-# 2. Запустити сервер
 uvicorn main:app --reload
+```
 
-# 3. Відкрити документацію Swagger
-# http://127.0.0.1:8000/docs
+## Як отримати токени
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"student\",\"password\":\"password123\"}"
+```
+
+У відповідь буде:
+
+```json
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "token_type": "bearer"
+}
+```
+
+## Як викликати захищений books endpoint
+
+```bash
+curl http://127.0.0.1:8000/books/ \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Без access token `/books` поверне `401 Unauthorized`.
+
+## Refresh token flow
+
+```bash
+curl -X POST http://127.0.0.1:8000/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"<refresh_token>\"}"
+```
+
+У відповідь буде новий `access_token`.
+
+## Основні файли
+
+```text
+main.py                 # створення FastAPI app і підключення router-ів
+api/auth.py             # auth endpoints: login, refresh, me
+api/books.py            # захищені endpoints для книг
+core/security.py        # створення, декодування і перевірка JWT
+schemas/auth.py         # Pydantic-схеми для auth
+schemas/books.py        # Pydantic-схеми для книг
+services/books.py       # бізнес-логіка книг
+repository/books.py     # робота з MongoDB
+database.py             # підключення до MongoDB
+tests/test_books.py     # тести API та JWT flow
+```
+
+## Змінні середовища
+
+```env
+MONGO_URL=mongodb://mongo_admin:password@localhost:27017
+JWT_SECRET_KEY=change-this-secret-for-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=7
+```
+
+## Перемикання між лабораторними
+
+Кожна лабораторна зберігається в окремій Git-гілці.
+
+```bash
+git checkout lab-5
+```
+
+Показати лабораторну 5.
+
+```bash
+git checkout lab-6
+```
+
+Показати лабораторну 6.
+
+Після перемикання гілки краще перезапустити Docker:
+
+```bash
+docker compose down
+docker compose up --build
 ```
 
 ## Запуск тестів
 
 ```bash
-pytest tests/test_books.py -v
+pytest tests -q
 ```
-
-## Структура проєкту
-
-```
-library_api/
-├── main.py              # Точка входу FastAPI додатку
-├── requirements.txt     # Залежності
-├── api/
-│   └── books.py         # Ендпоінти (маршрути)
-├── schemas/
-│   └── books.py         # Pydantic схеми (валідація)
-├── services/
-│   └── books.py         # Бізнес-логіка
-├── repository/
-│   └── books.py         # Взаємодія зі сховищем даних
-├── models/
-│   └── books.py         # Дані (List[Dict])
-└── tests/
-    └── test_books.py    # Юніт тести (25 тестів)
-```
-
-## Ендпоінти
-
-| Метод | URL | Опис | HTTP статус |
-|-------|-----|------|-------------|
-| GET | /books/ | Всі книги (з фільтрацією/сортуванням) | 200 |
-| GET | /books/{id} | Книга по ID | 200 / 404 |
-| POST | /books/ | Додати книгу | 201 / 422 |
-| DELETE | /books/{id} | Видалити книгу (ідемпотентно) | 204 |
-
-## Фільтрація та сортування
-
-```
-GET /books/?status=available
-GET /books/?status=issued
-GET /books/?author=Шевченко
-GET /books/?sort_by=year&sort_order=desc
-GET /books/?sort_by=title&sort_order=asc
-GET /books/?status=available&author=Тарас&sort_by=year
-```
-
-## Статуси книг
-
-- `available` — наявна в бібліотеці
-- `issued` — видана комусь
-
-## Ідемпотентний DELETE
-
-DELETE завжди повертає **204** — навіть якщо книги не існує.
-Це означає: повторний виклик дає той самий результат.

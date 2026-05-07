@@ -7,9 +7,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_INITDB_DATABASE: books
     volumes:
-      - mongo_data:/var/lib/mongodb/data
-    ports:
-      - '27017:27017'
+      - mongo_data:/data/db
 
   api:
     build: .
@@ -17,6 +15,9 @@ services:
       - "8000:8000"
     environment:
       MONGO_URL: mongodb://mongo_admin:password@mongo_db:27017
+      JWT_SECRET_KEY: lab6-super-secret-change-me
+      ACCESS_TOKEN_EXPIRE_MINUTES: 15
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
     depends_on:
       - mongo_db
 

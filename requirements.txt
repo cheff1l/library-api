@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pydantic
+PyJWT
 pytest
 httpx
 motor

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from bson import ObjectId
+from core.security import get_current_user
 from schemas.books import BookCreate, BookResponse, BookStatus
 from services.books import BookService
 from database import get_db
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 def get_service(db=Depends(get_db)):

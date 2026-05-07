@@ -1,37 +1,45 @@
-import pytest
-from httpx import AsyncClient, ASGITransport
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from bson import ObjectId
-from main import app
+from httpx import ASGITransport, AsyncClient
+
 from database import get_db
-from services.books import BookService
+from main import app
 
 
 class MockCollection:
     def __init__(self):
         self.data = []
 
-    def find(self, query={}):
+    def find(self, query=None):
+        query = query or {}
         result = []
-        for b in self.data:
+        for book in self.data:
             match = True
-            if "status" in query and b.get("status") != query["status"]:
+            if "status" in query and book.get("status") != query["status"]:
                 match = False
             if "author" in query:
                 import re
+
                 pattern = query["author"]["$regex"]
-                if not re.search(pattern, b.get("author", ""), re.IGNORECASE):
+                if not re.search(pattern, book.get("author", ""), re.IGNORECASE):
                     match = False
             if match:
-                result.append(dict(b))
+                result.append(dict(book))
 
         mock_cursor = MagicMock()
-        mock_cursor.sort.return_value = mock_cursor
+
+        def sort_func(field, direction):
+            result.sort(key=lambda item: item.get(field), reverse=direction == -1)
+            return mock_cursor
+
+        mock_cursor.sort.side_effect = sort_func
         mock_cursor.skip.return_value = mock_cursor
 
-        def limit_func(n):
+        def limit_func(limit):
             limited = MagicMock()
-            limited.to_list = AsyncMock(return_value=result[:n])
+            limited.to_list = AsyncMock(return_value=result[:limit])
             return limited
 
         mock_cursor.limit.side_effect = limit_func
@@ -52,7 +60,7 @@ class MockCollection:
 
     async def delete_one(self, query):
         before = len(self.data)
-        self.data = [b for b in self.data if b.get("_id") != query.get("_id")]
+        self.data = [book for book in self.data if book.get("_id") != query.get("_id")]
         result = MagicMock()
         result.deleted_count = before - len(self.data)
         return result
@@ -73,6 +81,11 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
+@pytest.fixture(scope="session")
+def anyio_backend():
+    return "asyncio"
+
+
 @pytest.fixture(autouse=True)
 def reset_db():
     mock_db.books.data.clear()
@@ -82,27 +95,87 @@ def reset_db():
 
 @pytest.fixture
 async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
+        yield test_client
+
+
+@pytest.fixture
+async def auth_headers(client):
+    response = await client.post(
+        "/auth/login",
+        json={"username": "student", "password": "password123"},
+    )
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.anyio
-async def test_get_all_books_empty(client):
+async def test_login_returns_access_and_refresh_tokens(client):
+    response = await client.post(
+        "/auth/login",
+        json={"username": "student", "password": "password123"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["token_type"] == "bearer"
+    assert data["access_token"]
+    assert data["refresh_token"]
+
+
+@pytest.mark.anyio
+async def test_login_with_wrong_password_returns_401(client):
+    response = await client.post(
+        "/auth/login",
+        json={"username": "student", "password": "wrong"},
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_refresh_token_flow_returns_new_access_token(client):
+    login = await client.post(
+        "/auth/login",
+        json={"username": "student", "password": "password123"},
+    )
+    refresh_token = login.json()["refresh_token"]
+
+    response = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["token_type"] == "bearer"
+    assert data["access_token"]
+
+
+@pytest.mark.anyio
+async def test_books_are_protected_without_token(client):
     response = await client.get("/books/")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_get_all_books_empty(client, auth_headers):
+    response = await client.get("/books/", headers=auth_headers)
+
     assert response.status_code == 200
     assert response.json()["items"] == []
 
 
 @pytest.mark.anyio
-async def test_create_book(client):
+async def test_create_book(client, auth_headers):
     payload = {
         "title": "Кобзар",
         "author": "Тарас Шевченко",
         "description": "Збірка поетичних творів",
         "status": "available",
-        "year": 1840
+        "year": 1840,
     }
-    response = await client.post("/books/", json=payload)
+
+    response = await client.post("/books/", json=payload, headers=auth_headers)
+
     assert response.status_code == 201
     data = response.json()
     assert data["title"] == "Кобзар"
@@ -110,64 +183,101 @@ async def test_create_book(client):
 
 
 @pytest.mark.anyio
-async def test_get_book_by_id(client):
+async def test_get_book_by_id(client, auth_headers):
     payload = {"title": "Кобзар", "author": "Шевченко", "year": 1840}
-    create = await client.post("/books/", json=payload)
+    create = await client.post("/books/", json=payload, headers=auth_headers)
     book_id = create.json()["id"]
-    response = await client.get(f"/books/{book_id}")
+
+    response = await client.get(f"/books/{book_id}", headers=auth_headers)
+
     assert response.status_code == 200
     assert response.json()["id"] == book_id
 
 
 @pytest.mark.anyio
-async def test_get_book_not_found(client):
-    response = await client.get(f"/books/{str(ObjectId())}")
+async def test_get_book_not_found(client, auth_headers):
+    response = await client.get(f"/books/{ObjectId()}", headers=auth_headers)
+
     assert response.status_code == 404
 
 
 @pytest.mark.anyio
-async def test_delete_book(client):
+async def test_delete_book(client, auth_headers):
     payload = {"title": "Кобзар", "author": "Шевченко", "year": 1840}
-    create = await client.post("/books/", json=payload)
+    create = await client.post("/books/", json=payload, headers=auth_headers)
     book_id = create.json()["id"]
-    response = await client.delete(f"/books/{book_id}")
+
+    response = await client.delete(f"/books/{book_id}", headers=auth_headers)
+
     assert response.status_code == 204
 
 
 @pytest.mark.anyio
-async def test_delete_idempotent(client):
-    response = await client.delete(f"/books/{str(ObjectId())}")
+async def test_delete_idempotent(client, auth_headers):
+    response = await client.delete(f"/books/{ObjectId()}", headers=auth_headers)
+
     assert response.status_code == 204
 
 
 @pytest.mark.anyio
-async def test_filter_by_status(client):
-    await client.post("/books/", json={"title": "Книга 1", "author": "Автор", "year": 2000, "status": "available"})
-    await client.post("/books/", json={"title": "Книга 2", "author": "Автор", "year": 2001, "status": "issued"})
-    response = await client.get("/books/?status=available")
+async def test_filter_by_status(client, auth_headers):
+    await client.post(
+        "/books/",
+        json={"title": "Книга 1", "author": "Автор", "year": 2000, "status": "available"},
+        headers=auth_headers,
+    )
+    await client.post(
+        "/books/",
+        json={"title": "Книга 2", "author": "Автор", "year": 2001, "status": "issued"},
+        headers=auth_headers,
+    )
+
+    response = await client.get("/books/?status=available", headers=auth_headers)
     data = response.json()["items"]
-    assert all(b["status"] == "available" for b in data)
+
+    assert all(book["status"] == "available" for book in data)
 
 
 @pytest.mark.anyio
-async def test_filter_by_author(client):
-    await client.post("/books/", json={"title": "Кобзар", "author": "Шевченко", "year": 1840})
-    await client.post("/books/", json={"title": "Інша", "author": "Франко", "year": 1900})
-    response = await client.get("/books/?author=Шевченко")
+async def test_filter_by_author(client, auth_headers):
+    await client.post(
+        "/books/",
+        json={"title": "Кобзар", "author": "Шевченко", "year": 1840},
+        headers=auth_headers,
+    )
+    await client.post(
+        "/books/",
+        json={"title": "Інша", "author": "Франко", "year": 1900},
+        headers=auth_headers,
+    )
+
+    response = await client.get("/books/?author=Шевченко", headers=auth_headers)
     data = response.json()["items"]
+
     assert len(data) == 1
     assert "Шевченко" in data[0]["author"]
 
 
 @pytest.mark.anyio
-async def test_pagination(client):
-    for i in range(5):
-        await client.post("/books/", json={"title": f"Книга {i}", "author": "Автор", "year": 2000 + i})
-    response = await client.get("/books/?limit=2&offset=0")
+async def test_pagination(client, auth_headers):
+    for index in range(5):
+        await client.post(
+            "/books/",
+            json={"title": f"Книга {index}", "author": "Автор", "year": 2000 + index},
+            headers=auth_headers,
+        )
+
+    response = await client.get("/books/?limit=2&offset=0", headers=auth_headers)
+
     assert len(response.json()["items"]) == 2
 
 
 @pytest.mark.anyio
-async def test_create_book_invalid(client):
-    response = await client.post("/books/", json={"author": "Автор", "year": 2000})
+async def test_create_book_invalid(client, auth_headers):
+    response = await client.post(
+        "/books/",
+        json={"author": "Автор", "year": 2000},
+        headers=auth_headers,
+    )
+
     assert response.status_code == 422
