@@ -1,7 +1,6 @@
 services:
   redis:
     image: redis:latest
-    container_name: book-cache
 
   mongo_db:
     image: mongo:latest
