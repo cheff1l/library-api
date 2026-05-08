@@ -34,6 +34,14 @@ paths:
                   value:
                     message: Library API is running!
                     docs: /docs
+                    lab: Lab 8 - Prism mock API
+                    mock_service: Stoplight Prism
+                    docker_compose_service: mock_api
+                    specification_file: openapi.yaml
+                    mounted_specification_path: /tmp/openapi.yaml
+                    docker_command: mock -h 0.0.0.0 --multiprocess=false /tmp/openapi.yaml
+                    docker_port: 4010:4010
+                    explanation: Prism reads openapi.yaml and returns mock responses without using MongoDB or real business logic.
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /auth/register:
@@ -409,6 +417,22 @@ components:
         message:
           type: string
         docs:
+          type: string
+        lab:
+          type: string
+        mock_service:
+          type: string
+        docker_compose_service:
+          type: string
+        specification_file:
+          type: string
+        mounted_specification_path:
+          type: string
+        docker_command:
+          type: string
+        docker_port:
+          type: string
+        explanation:
           type: string
     LoginRequest:
       type: object
