@@ -66,10 +66,6 @@ core/rate_limiter.py # Redis rate limiter with RATE_LIMIT_ENABLED switch
 api/auth.py          # Login endpoint tested by Locust
 ```
 
-## What To Say To The Teacher
-
-In this lab I added load testing with Locust. The test is described in
-`locustfile.py`; it creates virtual users that repeatedly call one selected
 endpoint, `POST /auth/login`. Locust runs in Docker through the `locust` service
 in `docker-compose.yml` and provides a Web UI on port `8089`. For this branch
 the rate limiter is disabled with `RATE_LIMIT_ENABLED=false`, because the goal
