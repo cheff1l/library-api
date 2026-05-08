@@ -170,34 +170,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
-## Перемикання між лабораторними
-
-Кожна лабораторна зберігається в окремій Git-гілці.
-
-```bash
-git checkout lab-5
-```
-
-Показати лабораторну 5.
-
-```bash
-git checkout lab-6
-```
-
-Показати лабораторну 6.
-
-```bash
-git checkout lab-7
-```
-
-Показати лабораторну 7.
-
-Після перемикання гілки краще перезапустити Docker:
-
-```bash
-docker compose down
-docker compose up --build
-```
 
 ## Запуск тестів
 
