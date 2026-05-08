@@ -86,22 +86,4 @@ core/rate_limiter.py   # Redis rate limiter
 core/security.py       # JWT логіка
 ```
 
-## Перемикання між лабораторними
-
-```bash
-git checkout lab-5
-git checkout lab-6
-git checkout lab-7
-git checkout lab-8
-```
-
-Після перемикання:
-
-```bash
-docker compose down
-docker compose up --build
-```
-
-## Що сказати викладачу
-
 У цій лабораторній створено mock API для бібліотеки через Stoplight Prism. Я описав наш API у `openapi.yaml`, додав у Docker Compose окремий сервіс `mock_api`, який запускає команду `prism mock`, підключає YAML-файл зі специфікацією і відкриває mock server на порті `4010`.
