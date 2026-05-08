@@ -9,6 +9,7 @@ from core.security import decode_token
 
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
 
 RATE_LIMITS = {
     "anonymous": (2, 60),
@@ -56,6 +57,9 @@ def get_rate_limit_identity(request: Request) -> tuple[str, str]:
 
 
 async def rate_limit(request: Request) -> None:
+    if not RATE_LIMIT_ENABLED:
+        return
+
     if is_excluded_path(request.url.path):
         return
 

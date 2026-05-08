@@ -27,12 +27,23 @@ services:
     environment:
       MONGO_URL: mongodb://mongo_admin:password@mongo_db:27017
       REDIS_URL: redis://redis:6379/0
+      RATE_LIMIT_ENABLED: "false"
       JWT_SECRET_KEY: lab6-super-secret-change-me
       ACCESS_TOKEN_EXPIRE_MINUTES: 15
       REFRESH_TOKEN_EXPIRE_DAYS: 7
     depends_on:
       - redis
       - mongo_db
+
+  locust:
+    image: locustio/locust:latest
+    command: -f /mnt/locust/locustfile.py --host http://api:8000 --web-host 0.0.0.0
+    volumes:
+      - ./locustfile.py:/mnt/locust/locustfile.py:ro
+    ports:
+      - "8089:8089"
+    depends_on:
+      - api
 
 volumes:
   mongo_data:

@@ -1,107 +1,77 @@
-# Library API - Lab 8
+# Library API - Lab 9
 
-Лабораторна робота 8: створення mock API з використанням Stoplight Prism.
+Laboratory work 9: API load testing with Locust.
 
-Проект базується на попередніх лабораторних: реальний FastAPI застосунок має JWT authentication, Redis rate limiter і MongoDB. Для цієї лабораторної додано окремий mock-сервіс `mock_api`, який читає `openapi.yaml` і запускає mock server через Prism.
+The project is based on previous labs: FastAPI, JWT access/refresh authentication,
+Redis rate limiter, MongoDB, and Prism mock API. In this lab a Locust load test is
+added and everything is started through Docker Compose.
 
-## Що реалізовано
+## What Was Added
 
-- OpenAPI YAML специфікація у файлі `openapi.yaml`;
-- Docker Compose service `mock_api`;
-- запуск Prism через command у `docker-compose.yml`;
-- mock API доступний на порті `4010`;
-- реальний FastAPI API доступний на порті `8000`;
-- у mock API описані Auth, Books, root endpoint, помилки 401/404/422/429.
+- `locustfile.py` with a Locust load test;
+- Docker Compose service `locust`;
+- Locust Web UI on port `8089`;
+- load testing of one endpoint: `POST /auth/login`;
+- `RATE_LIMIT_ENABLED=false` for the API container in this branch, so the load
+  test checks API performance without being stopped by the rate limiter.
 
-## Запуск
+## Run
 
 ```bash
 docker compose up --build
 ```
 
-Після запуску будуть доступні:
+After startup:
 
 ```text
-Real API: http://127.0.0.1:8000/docs
-Mock API: http://127.0.0.1:4010
+FastAPI Swagger: http://127.0.0.1:8000/docs
+Locust UI:       http://127.0.0.1:8089
+Prism mock API:  http://127.0.0.1:4010
 ```
 
-## Prism service
+## How To Run The Locust Test
 
-У `docker-compose.yml` додано:
+1. Open `http://127.0.0.1:8089`.
+2. Set users, for example `10`.
+3. Set spawn rate, for example `2`.
+4. Host should already be `http://api:8000`.
+5. Click `Start swarming`.
+6. Watch the statistics for `POST /auth/login`.
 
-```yaml
-mock_api:
-  image: stoplight/prism:latest
-  command: mock -h 0.0.0.0 --multiprocess=false /tmp/openapi.yaml
-  volumes:
-    - ./openapi.yaml:/tmp/openapi.yaml:ro
-  ports:
-    - "4010:4010"
+The test sends this request repeatedly:
+
+```http
+POST /auth/login
+Content-Type: application/json
 ```
 
-Пояснення:
-
-- `stoplight/prism:latest` - Docker image з Prism;
-- `mock` - команда запуску mock server;
-- `-h 0.0.0.0` - потрібно, щоб сервер був доступний поза контейнером;
-- `--multiprocess=false` - вимикає multiprocess режим Prism, щоб контейнер стабільно працював у Docker;
-- `/tmp/openapi.yaml` - YAML специфікація API всередині контейнера;
-- `4010:4010` - порт mock API.
-
-## Як перевірити mock API
-
-Root endpoint:
-
-```bash
-curl http://127.0.0.1:4010/
+```json
+{
+  "username": "student",
+  "password": "password123"
+}
 ```
 
-Login mock:
+Expected result: most requests should return `200 OK`, and the Locust screen
+should show request count, failures, average response time, min/max response
+time, and requests per second.
 
-```bash
-curl -X POST http://127.0.0.1:4010/auth/login \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"student\",\"password\":\"password123\"}"
-```
-
-Books mock:
-
-```bash
-curl http://127.0.0.1:4010/books/ \
-  -H "Authorization: Bearer mock-access-token"
-```
-
-Prism не виконує реальну бізнес-логіку і не працює з MongoDB. Він читає `openapi.yaml`, перевіряє, чи запит відповідає специфікації, і повертає приклади відповідей.
-
-## Основні файли
+## Main Files
 
 ```text
-openapi.yaml           # OpenAPI специфікація для Prism
-docker-compose.yml     # real API + MongoDB + Redis + Prism mock API
-main.py                # реальний FastAPI app
-api/auth.py            # auth endpoints
-api/books.py           # protected books endpoints
-core/rate_limiter.py   # Redis rate limiter
-core/security.py       # JWT логіка
+locustfile.py         # Locust load test scenario
+docker-compose.yml   # API, MongoDB, Redis, Prism, and Locust services
+main.py              # FastAPI application
+core/rate_limiter.py # Redis rate limiter with RATE_LIMIT_ENABLED switch
+api/auth.py          # Login endpoint tested by Locust
 ```
 
-## Перемикання між лабораторними
+## What To Say To The Teacher
 
-```bash
-git checkout lab-5
-git checkout lab-6
-git checkout lab-7
-git checkout lab-8
-```
-
-Після перемикання:
-
-```bash
-docker compose down
-docker compose up --build
-```
-
-## Що сказати викладачу
-
-У цій лабораторній створено mock API для бібліотеки через Stoplight Prism. Я описав наш API у `openapi.yaml`, додав у Docker Compose окремий сервіс `mock_api`, який запускає команду `prism mock`, підключає YAML-файл зі специфікацією і відкриває mock server на порті `4010`.
+In this lab I added load testing with Locust. The test is described in
+`locustfile.py`; it creates virtual users that repeatedly call one selected
+endpoint, `POST /auth/login`. Locust runs in Docker through the `locust` service
+in `docker-compose.yml` and provides a Web UI on port `8089`. For this branch
+the rate limiter is disabled with `RATE_LIMIT_ENABLED=false`, because the goal
+of the lab is to measure endpoint behavior under load, not to receive `429`
+responses from the previous lab.

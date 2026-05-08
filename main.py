@@ -7,8 +7,8 @@ from core.rate_limiter import rate_limit
 
 app = FastAPI(
     title="Library API",
-    description="REST API для бібліотеки книг з JWT access/refresh authentication та Redis rate limiter.",
-    version="7.0.0",
+    description="REST API for a library with JWT authentication, Redis rate limiter, Prism mock API, and Locust load testing.",
+    version="9.0.0",
 )
 
 app.include_router(auth_router, prefix="/auth", tags=["Auth"])
